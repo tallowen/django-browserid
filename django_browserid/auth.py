@@ -99,13 +99,6 @@ class BrowserIDBackend(object):
     supports_object_permissions = False
 
     def _verify_http_request(self, url, qs):
-        params = {'timeout': getattr(settings, 'BROWSERID_HTTP_TIMEOUT',
-                                     DEFAULT_HTTP_TIMEOUT)}
-
-        proxy_info = getattr(settings, 'BROWSERID_PROXY_INFO', None)
-        if proxy_info:
-            raise Exception("This version does not support BROWSERID_PROXY_INFO")
-
 
         if getattr(settings, 'BROWSERID_DISABLE_CERT_CHECK', False):
             ca_certs = False
@@ -115,18 +108,16 @@ class BrowserIDBackend(object):
             else:
                 ca_certs = True
 
-
         headers = {'Content-type': 'application/x-www-form-urlencoded'}
-
-        r = requests.post(url,data=qs,
-                              headers=headers,
-                              verify=ca_certs)
+        r = requests.post(url, data=qs,
+                               headers=headers,
+                               verify=ca_certs)
 
         try:
             rv = json.loads(r.content)
         except ValueError:
             log.debug('Failed to decode JSON. Resp: %s, Content: %s' % (
-                resp, r.content))
+                r.status_code, r.content))
             return dict(status='failure')
 
         return rv
