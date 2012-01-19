@@ -8,7 +8,7 @@ import hashlib
 import logging
 import urllib
 
-import httplib2
+import requests
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -104,28 +104,29 @@ class BrowserIDBackend(object):
 
         proxy_info = getattr(settings, 'BROWSERID_PROXY_INFO', None)
         if proxy_info:
-            params['proxy_info'] = proxy_info
+            raise Exception("This version does not support BROWSERID_PROXY_INFO")
 
-        ca_certs = getattr(settings, 'BROWSERID_CACERT_FILE', None)
-        if ca_certs:
-            params['ca_certs'] = ca_certs
 
-        disable_cert_check = getattr(settings,
-                                     'BROWSERID_DISABLE_CERT_CHECK',
-                                     False)
-        if disable_cert_check:
-            params['disable_ssl_certificate_validation'] = disable_cert_check
+        if getattr(settings, 'BROWSERID_DISABLE_CERT_CHECK', False):
+            ca_certs = False
+        else:
+            if getattr(settings, 'BROWSERID_CACERT_FILE', None):
+                ca_certs = settings.BROWSERID_CACERT_FILE
+            else:
+                ca_certs = True
 
-        client = httplib2.Http(**params)
 
         headers = {'Content-type': 'application/x-www-form-urlencoded'}
-        resp, content = client.request(url, 'POST', body=qs, headers=headers)
+
+        r = requests.post(url,data=qs,
+                              headers=headers,
+                              verify=ca_certs)
 
         try:
-            rv = json.loads(content)
+            rv = json.loads(r.content)
         except ValueError:
             log.debug('Failed to decode JSON. Resp: %s, Content: %s' % (
-                resp, content))
+                resp, r.content))
             return dict(status='failure')
 
         return rv
