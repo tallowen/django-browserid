@@ -108,10 +108,14 @@ class BrowserIDBackend(object):
             else:
                 ca_certs = True
 
+        config = dict(timeout = DEFAULT_HTTP_TIMEOUT)
+
         headers = {'Content-type': 'application/x-www-form-urlencoded'}
-        r = requests.post(url, data=qs,
-                               headers=headers,
-                               verify=ca_certs)
+        r = requests.post(url,
+                data=qs,
+                headers=headers,
+                verify=ca_certs,
+                config=config)
 
         try:
             rv = json.loads(r.content)

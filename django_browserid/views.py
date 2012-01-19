@@ -1,13 +1,15 @@
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.contrib import auth
 from django.http import HttpResponseRedirect
-from django.views.generic.base import View
+from django.shortcuts import redirect
+from django.views.generic.edit import BaseFormView
 
 from django_browserid.forms import BrowserIDForm
 from django_browserid.auth import get_audience
 
 
-class Verify(View):
+class Verify(BaseFormView):
     """
     This view provides common functionality for handling the browserID callback
 
@@ -33,35 +35,9 @@ class Verify(View):
         ...
     )
     """
-
-    def post(self, request):
-        """
-        Handles the return post request from the browserID form and puts
-        interesting variables into the class. If everything checks out, then
-        we call handle_user to decide how to handle a valid user
-        """
-
-        self.redirect_to = getattr(settings, 'LOGIN_REDIRECT_URL', '/')
-        self.redirect_to_failure = getattr(
-                settings, 'LOGIN_REDIRECT_URL_FAILURE', '/')
-
-        form = BrowserIDForm(data=request.POST)
-        if form.is_valid():
-            self.assertion = form.cleaned_data['assertion']
-            self.user = auth.authenticate(assertion=self.assertion,
-                                          audience=get_audience(self.request))
-            if self.user and self.user.is_active:
-                return self.handle_user(request, self.user)
-
-        return HttpResponseRedirect(self.redirect_to_failure)
-
-    def store_user_in_session(self):
-        """
-        Stores assertion and audience in a session so they can be authenticated
-        after a redirect
-        """
-        self.request.session['assertion'] = self.assertion
-        self.request.session['audience'] = get_audience(self.request)
+    form_class = BrowserIDForm
+    failure_url = getattr(settings, 'LOGIN_REDIRECT_URL_FAILURE', '/')
+    success_url = getattr(settings, 'LOGIN_REDIRECT_URL', '/')
 
     def handle_user(self, request, user):
         """
@@ -69,7 +45,46 @@ class Verify(View):
         should be subclassed to accomplish more complicated behavior
         """
         auth.login(request, user)
-        return HttpResponseRedirect(self.redirect_to)
+        return HttpResponseRedirect(self.get_success_url())
+
+    def form_valid(self, form):
+        """
+        Handles the return post request from the browserID form and puts
+        interesting variables into the class. If everything checks out, then
+        we call handle_user to decide how to handle a valid user
+        """
+        self.assertion = form.cleaned_data['assertion']
+        self.audience = get_audience(self.request)
+        self.user = auth.authenticate(
+                assertion=self.assertion,
+                audience=self.audience)
+
+        if self.user and self.user.is_active:
+            return self.handle_user(self.request, self.user)
+
+        return HttpResponseRedirect(self.get_failure_url())
+
+    def store_user_in_session(self):
+        """
+        Stores assertion and audience in a session so they can be authenticated
+        after a redirect
+        """
+        self.request.session['assertion'] = self.assertion
+        self.request.session['audience'] = self.audience
+
+    def get_failure_url(self):
+        if self.failure_url:
+            url = self.failure_url
+        else:
+            raise ImproperlyConfigured(
+                "No URL to redirect to. Provide a failure_url.")
+        return url
+
+    def get(self, *args, **kwargs):
+        return redirect('/')
+
+    def form_invalid(self, *args, **kwargs):
+        return redirect(self.get_failure_url())
 
 
 def get_authenticated_user(request):
